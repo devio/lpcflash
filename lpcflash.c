@@ -225,6 +225,7 @@ int main(int argc, char **argv)
    mem.img_sector_last  = opt_flash_sector_to;
    mem.rom_sector_last  = lpcflash_get_lastsector(mem.cpu.id);
    mem.rom_address_base = mem.rom_sector_base * 0x1000;
+
    
    serial_cmd_unlock(serial_fd);
 
@@ -273,9 +274,9 @@ int main(int argc, char **argv)
 static void lpcflash_erase(int serial_fd, mem_info_t *mem)
 {
    /* erase [entire] (user) flash rom */
-   printf("[+] erasing sectors %d - %d",  mem->img_sector_base, mem->img_sector_last);
-   serial_cmd_prepare_sector(serial_fd,   mem->img_sector_base, mem->img_sector_last);
-   serial_cmd_erase_sector(serial_fd,     mem->img_sector_base, mem->img_sector_last);
+   printf("[+] erasing sectors %ld - %d",  mem->rom_address_base, mem->rom_sector_last);
+   serial_cmd_prepare_sector(serial_fd,   mem->rom_address_base, mem->rom_sector_last);
+   serial_cmd_erase_sector(serial_fd,     mem->rom_address_base, mem->rom_sector_last);
    printf(" - done.\n");   
    
    return;
@@ -307,6 +308,12 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
     */
    
    switch(mem->cpu.id) {
+      case PART_LPC1343:
+         // 32kB ROM
+         mem->img_sector_last = (bin_stat.st_size + (0x1000 - (bin_stat.st_size % 0x1000))) / 0x1000;
+         mem->rom_sector_last = 0x07;         
+         mem->rom_total_size  = mem->rom_sector_last * 0x1000;
+         break;      
       case PART_LPC1751:
          // 32kB ROM
          mem->img_sector_last = (bin_stat.st_size + (0x1000 - (bin_stat.st_size % 0x1000))) / 0x1000;
@@ -336,16 +343,19 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
          break;
       
       case PART_LPC1756:
-      case PART_LPC1765:
+      case PART_LPC1763:
+	  case PART_LPC1765:
       case PART_LPC1766:
          // 256kB ROM
          /* determine sectors used by firmware image */
          if(bin_stat.st_size < 0x00010000) { // only 4k sectors are used
             mem->img_sector_last = (bin_stat.st_size + (0x1000 - (bin_stat.st_size % 0x1000))) / 0x1000;
             mem->img_total_size  = mem->img_sector_last * 0x1000;
+			printf("D1: mem->img_sector_last = %x\nD1: mem->img_total_size = %x\n", mem->img_sector_last, mem->img_total_size);
          } else {
             mem->img_sector_last = 0x0f + ((bin_stat.st_size - 0x10000) + (0x8000 - ((bin_stat.st_size - 0x10000) % 0x8000))) / 0x8000;
             mem->img_total_size  = mem->img_sector_last * 0x8000;
+			printf("D2: mem->img_sector_last = %x\nD2: mem->img_total_size = %x\n", mem->img_sector_last, mem->img_total_size);
          }
          mem->rom_sector_last = 0x15;
 
@@ -401,9 +411,10 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
    nwritten=0;
    
    // process 4kB sectors
-   for(i=mem->rom_sector_base; i<( (mem->img_sector_last + mem->rom_sector_base) & 0x0F); i++) {
+   for(i=mem->rom_sector_base; i<=0xf && i<(mem->img_sector_last + mem->rom_sector_base); i++) {
       unsigned int j=0;
-      
+      		
+		
       serial_cmd_prepare_sector(serial_fd, i, i);
       serial_cmd_erase_sector(serial_fd, i, i);
       
@@ -414,16 +425,14 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
             break;
          }
          
-         //printf("DD: calling write to ram: nr=%d - outbuf = \n", nr);
-         //print_hex_ascii_line((unsigned char *)outbuf, nr, 0);
-         
+		 
          serial_cmd_write_to_ram(serial_fd, mem->ram_buffer_address, nr, outbuf);
          serial_cmd_prepare_sector(serial_fd, i, i);
          serial_cmd_copy_ram_to_flash(serial_fd, mem->rom_address_base + nwritten, mem->ram_buffer_address, 512);
 
          nwritten += nr;
 
-         printf("[-] current sector: 0x%02X - 0x%08X of 0x%08X bytes written\r\n", 
+         printf("[-] current 4k sector: 0x%02X - 0x%08X of 0x%08X bytes written\r\n", 
             i, nwritten, (unsigned int)bin_stat.st_size);
             
          fflush(stdout);
@@ -431,27 +440,29 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
    }
 
    // process 32kB sectors
-   for(i=0; i< (((mem->img_sector_last + mem->rom_sector_base) & 0xF0) >> 4); i++) {
+   for(; i<=(mem->img_sector_last + mem->rom_sector_base); i++) {
       unsigned j=0;
+
       for(j=0; j < (0x8000/0x200); j++) { // write in blocksizes of 512 byte
          
          int nr = read(bin_fd, &outbuf, 512);
          if(nr <= 0) { // ende gelaende.
             break;
          }
+		 
          serial_cmd_write_to_ram(serial_fd, mem->ram_buffer_address, nr, outbuf);
          serial_cmd_prepare_sector(serial_fd, i, i);
          serial_cmd_copy_ram_to_flash(serial_fd, mem->rom_address_base + nwritten, mem->ram_buffer_address, 512);
 
          nwritten += nr;
 
-         printf("[-] current sector: 0x%02X - 0x%08X of 0x%08X bytes written\r\n", 
+         printf("[-] current 32k sector: 0x%02X - 0x%08X of 0x%08X bytes written\r\n", 
             i, nwritten, (unsigned int)bin_stat.st_size);
             
          fflush(stdout);
       }
    }
-   
+
    printf("[*] done.\n");
 
    close(bin_fd);
@@ -521,7 +532,11 @@ static int lpcflash_image_dump(int serial_fd, mem_info_t *mem, char *imgpath)
          mem->rom_total_size  += (mem->rom_sector_last-0x0F) * 0x8000;
                   
          break;
-      
+      case PART_LPC1343:
+         // 32kB ROM
+         mem->rom_sector_last = 0x07;         
+         mem->rom_total_size  = mem->rom_sector_last * 0x1000;
+         break;
       default:
          printf("[e] Unknown part id (%08x)\n", mem->cpu.id);
          mem->img_sector_last = 0;
@@ -637,7 +652,9 @@ static unsigned int lpcflash_get_lastsector(unsigned int id)
          // 512 kB ROM
          last_sector = 0x1d;
          break;
-      
+      case PART_LPC1343:
+         last_sector = 0x07;
+         break;
       default:
          printf("[e] Unknown part id (%08x)\n", id);
          return 0;

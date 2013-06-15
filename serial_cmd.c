@@ -480,6 +480,8 @@ int serial_cmd_prepare_sector(int serial_fd, unsigned int from_sector, unsigned 
    
    snprintf(cmd, sizeof(cmd), "P %d %d\r\n", from_sector, to_sector);
    
+   //printf("D Prepare: %s\n", cmd);
+   
    memset(&buf,0,sizeof(buf));
    len=0;
 
