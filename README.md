@@ -1,20 +1,19 @@
-2011/01/30
-
-lpcflash (beta) - an opensource flash utility for NXP LPC17xx ARM CM3 series 
+# lpcflash (beta) 2013/09/08
+### an opensource flash utility for NXP LPC17xx ARM CM3 series
 
 Currently supporting:
   - boot rom/on-chip serial bootloader.
-  - all lpc1700 boot rom loader compatible bootloaders, such as the usb cdc secondary bootloader included in 
-    the opensource LPCboot Suite (will be released soon)
+  - all lpc1700 boot rom loader compatible bootloaders, such as the usb cdc secondary bootloader included in the opensource LPCboot Suite (will be released soon)
  
 lpcflash was written by Thorsten Schroeder <ths (at) dev (dot) io> and is released under the 2-clause BSD license. Even though it is released under a very flexible and free licence, feedback and feature requests are highly appreciated.
 
-PLATFORMS
+#### PLATFORMS
 
 lpcflash was tested under Mac OSX 10.6.6 and Ubuntu 10.04 LTS. Target platforms are all LPC1700 based ARM Coretex-M3 processors.
 
-BUILD
+#### BUILD
 
+```
 $ make
 gcc -Wall -g     -c -o lpcflash.o lpcflash.c
 gcc -Wall -g     -c -o serial.o serial.c
@@ -23,11 +22,19 @@ gcc -Wall -g     -c -o serial_cmd.o serial_cmd.c
 gcc -Wall -g     -c -o msg.o msg.c
 gcc -Wall -g     -c -o const.o const.c
 gcc -Wall -g     -c -o chksum.o chksum.c
-gcc -Wall -g   -o lpcflash lpcflash.o serial.o base64.o serial_cmd.o msg.o const.o chksum.o 
+gcc -Wall -g   -o lpcflash lpcflash.o serial.o base64.o serial_cmd.o msg.o const.o chksum.o
+```
+
+#### BUILD w/libftdi support (requires libftdi)
+
+```
+LIBS="$(libftdi1-config --libs)" INCS="$(libftdi1-config --cflags)" make libftdi
+```
 
 
-USAGE
+#### USAGE
 
+```
 $ ./lpcflash 
 usage: lpcflash
 	 -l  <serial line>   (8N1 cu device)
@@ -47,9 +54,9 @@ usage: lpcflash
 	[-i]                 (dump cpu infos)
 	[-e]                 (erase only (== erase and exit))
 [-] More infos at https://project.dev.io/code/arm/
+```
 
-
-FEATURES
+#### FEATURES
 
 + Erase all flash ROM sectors
 + Erase selected flash ROM sectors/ranges
@@ -62,8 +69,9 @@ Everything that is specified within the LPC17xx user documentation (ISP/IAP (fla
 
 EXAMPLES:
 
-1) Erase all sectors on an LPC1756 using the on-chip bootloader via serial line
+#### Erase all sectors on an LPC1756 using the on-chip bootloader via serial line
 
+```
 $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -e -A
 [*] 
 [*] Detected part ID = 0x25011723:
@@ -72,9 +80,11 @@ $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -e -A
 [*]         Boot code: 0x1
 [*] 
 [+] erasing sectors 0 - 21 - done.
+```
 
-2) Write a firmware image file to flash ROM sector 0, using the LPC1756 on-chip bootloader via serial line
+#### Write a firmware image file to flash ROM sector 0, using the LPC1756 on-chip bootloader via serial line
 
+```
 $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -f testbinaries/keykerikiv2-blinke-flashplace-0000h.bin
 [*] 
 [*] Detected part ID = 0x25011723:
@@ -96,9 +106,11 @@ $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -f testbinaries/keykerikiv2-blinke-fl
 [-] current sector: 0x00 - 0x00000C00 of 0x00000E00 bytes written
 [-] current sector: 0x00 - 0x00000E00 of 0x00000E00 bytes written
 [*] done.
+```
 
-3) hexdump (to stdout) flash ROM address 0x00000000-0x00001000 of an LPC1756 using the on-chip bootloader via serial line
+#### hexdump (to stdout) flash ROM address 0x00000000-0x00001000 of an LPC1756 using the on-chip bootloader via serial line
 
+```
 $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -a 0x00000000 -s 0x1000
 [*] 
 [*] Detected part ID = 0x25011723:
@@ -123,10 +135,11 @@ $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -a 0x00000000 -s 0x1000
 000c0   49 02 00 00 4b 02 00 00  4d 02 00 00 2b 49 8d 46    I   K   M   +I F
 000d0   2b 49 2c 48 0a 1a 04 d0  81 f3 09 88 02 22 82 f3    +I,H         "  
 [...]
+```
 
+#### hexdump (to stdout) 256 bytes of SRAM address 0x10000000 of an LPC1756 using the on-chip bootloader via serial line
 
-4) hexdump (to stdout) 256 bytes of SRAM address 0x10000000 of an LPC1756 using the on-chip bootloader via serial line
-
+```
 $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -a 0x10000000 -s 0x100
 [*] 
 [*] Detected part ID = 0x25011723:
@@ -152,9 +165,11 @@ $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -a 0x10000000 -s 0x100
 100000d0   22 bb 93 b4 db 19 80 82  c8 fb d1 0e 99 98 2f cc    "             / 
 100000e0   9b e1 40 0e 5b 54 b2 51  44 ad fb 01 41 96 45 6d      @ [T QD   A Em
 100000f0   fc 5a 84 cf 2d cb fe 28  07 6b 75 a6 f8 c0 64 32     Z  -  ( ku   d2
+```
 
-5) Dumping all flash ROM sectors of an LPC1756 to file, starting at flash ROM base sector 0
+#### Dumping all flash ROM sectors of an LPC1756 to file, starting at flash ROM base sector 0
 
+```
 $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -A -B 0 -o flashrom.bin
 [*] 
 [*] Detected part ID = 0x25011723:
@@ -170,26 +185,21 @@ $ ./lpcflash -l /dev/cu.usbserial-A1004cdd -b 115200 -A -B 0 -o flashrom.bin
 [+] remapping boot interrupt vector.
 [+] reading sector 0 - 21. Starting at address 00000000, reading 262144 bytes
 [*] read 00040000 of 00040000 Bytes from address 00000000
+```
 
-Why?
+#### Why?
 
 The Official FlashMagic Tool for this task, which is recommended and referred to by NXP is available only for Microsoft Windows operating systems. There is no sourcecode available for porting it to different platforms, and the usage scenarios are quite restricted for non-paying customers. The free FlashMagicTool version is quite restrictive. LPCFlash utility is available as source code under the BSD license. It has been tested with Mac OSX and Linux. A complete list of supported platforms is available in the source code.
 
-Where?
+#### Where?
 
 
 Please be aware, that this version is a very early beta testing version. Please send wishes, recommendations, bug-reports and comments to me, using email. Every feedback is highly appreciated!
 
-What else?
+#### What else?
 
 I'm also working on an open-source LPCboot Suite
 
-Support?
+#### Support?
 
 Hardware and Developer Boards are expensive. Hardware donations are highly appreciated...
-
-
-
-
-
-
