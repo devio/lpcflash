@@ -50,16 +50,16 @@ int serial_cmd_copy_ram_to_flash(int, unsigned int, unsigned int, unsigned int);
 int serial_cmd_go(int, unsigned int);                                            // addr
 int serial_cmd_compare(int, unsigned int, unsigned int, unsigned int);           // addr1, addr2, number of bytes
 
-int serial_cmd_read_partid(int, unsigned int *);
-int serial_cmd_read_bootcode_version(int, unsigned int *);
-int serial_cmd_read_device_serialno(int, unsigned int *);
-int serial_cmd_prepare_sector(int, unsigned int, unsigned int);
-int serial_cmd_unlock(int);
-int serial_cmd_erase_sector(int, unsigned int, unsigned int);
+int serial_cmd_read_partid(unsigned int *);
+int serial_cmd_read_bootcode_version(unsigned int *);
+int serial_cmd_read_device_serialno(unsigned int *);
+int serial_cmd_prepare_sector(unsigned int, unsigned int);
+int serial_cmd_unlock(void);
+int serial_cmd_erase_sector(unsigned int, unsigned int);
 
 void serial_cmd_remap_bootvect(int, unsigned long); 
 
-int serial_synchronize(int, unsigned int);
+int serial_synchronize(unsigned int);
 int serial_retcode(char *, int);
 int serial_check_ok(char *, int);
 

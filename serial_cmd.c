@@ -96,9 +96,9 @@ int serial_cmd_write_to_ram(int serial_fd, unsigned int ramstart, unsigned int c
    // TODO check ramaddr word boundary -ths
 
    snprintf(cmd, sizeof(cmd), "W %d %d\r\n", ramstart, count);
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
    
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
    len = 0;
    
@@ -127,14 +127,14 @@ int serial_cmd_write_to_ram(int serial_fd, unsigned int ramstart, unsigned int c
          memset(&buf,0,sizeof(buf));
          snprintf(buf, sizeof(buf), "%s\r\n", uuout);
          
-         serial_send(serial_fd, strlen((char *)buf), buf);                  
+         serial_send(strlen((char *)buf), buf);                  
       }
       
       //printf("checksum: %d\n",checksum);
       snprintf(cmd, sizeof(cmd), "%d\r\n", checksum);
       
-      serial_send(serial_fd, strlen(cmd), cmd);
-      len=serial_readline(buf, sizeof(buf), serial_fd);
+      serial_send(strlen(cmd), cmd);
+      len=serial_readline(buf, sizeof(buf));
 
       if(serial_check_ok(buf, len))
          ;
@@ -168,7 +168,7 @@ int serial_cmd_write_to_ram(int serial_fd, unsigned int ramstart, unsigned int c
       memset(&buf,0,sizeof(buf));
       snprintf(buf, sizeof(buf), "%s\r\n", uuout);
      
-      nwritten = serial_send(serial_fd, strlen((char *)buf), buf);
+      nwritten = serial_send(strlen((char *)buf), buf);
       memset(&buf,0,sizeof(buf));
 
    }
@@ -186,14 +186,14 @@ int serial_cmd_write_to_ram(int serial_fd, unsigned int ramstart, unsigned int c
    memset(&buf,0,sizeof(buf));
    snprintf(buf, sizeof(buf), "%s\r\n", uuout);
    
-   serial_send(serial_fd, (unsigned int)strlen((char *)buf), buf);
+   serial_send((unsigned int)strlen((char *)buf), buf);
    
    memset(&buf,0,sizeof(buf));
 
    // send checksum
    snprintf(cmd, sizeof(cmd), "%d\r\n", checksum);
-   serial_send(serial_fd, strlen(cmd), cmd);
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   serial_send(strlen(cmd), cmd);
+   len = serial_readline(buf, sizeof(buf));
 
    if(serial_check_ok(buf, len))
       ;
@@ -278,8 +278,8 @@ int serial_cmd_read_memory(int serial_fd, char *imgpath, unsigned int start, uns
    len = 0;
 
    snprintf(cmd, sizeof(cmd), "R %d %d\r\n", start, count);
-   serial_send(serial_fd, strlen(cmd), cmd);
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   serial_send(strlen(cmd), cmd);
+   len = serial_readline(buf, sizeof(buf));
    
 //   printf("\n---\nread mem ret: \n");
 //   print_hex_ascii_line((unsigned char *)buf, len, 0);
@@ -302,7 +302,7 @@ int serial_cmd_read_memory(int serial_fd, char *imgpath, unsigned int start, uns
       unsigned int binlen=0;
       unsigned int uulen=0;
    
-      len=serial_readline(buf, sizeof(buf), serial_fd);
+      len=serial_readline(buf, sizeof(buf));
       
       //printf("\n---\nread mem ret: \n");
       //print_hex_ascii_line((unsigned char *)buf, len, 0);
@@ -329,14 +329,14 @@ int serial_cmd_read_memory(int serial_fd, char *imgpath, unsigned int start, uns
             int got_chksum = strtol(uuline, NULL, 10);
                
             if(got_chksum == checksum)
-               sent = serial_send(serial_fd, 4, "OK\r\n");
+               sent = serial_send(4, "OK\r\n");
             
             else { //XXX implement proper resend request handling!
                
                printf("\n[e] (%d > %d ?) sumlen=%d - count=%d - checksum mismatch: %x == %x\n", 
                      binlen, uulen, sumlen, count, got_chksum, checksum);
                
-               sent = serial_send(serial_fd, 4, "RESEND\r\n");
+               sent = serial_send(4, "RESEND\r\n");
             }
             
             checksum = serial_checksum_init();
@@ -396,8 +396,8 @@ int serial_cmd_copy_ram_to_flash(int serial_fd, unsigned int flash_addr, unsigne
    memset(&buf,0,sizeof(buf));
    len=0;
    
-   serial_send(serial_fd, strlen(cmd), cmd);
-   len=serial_readline(buf, sizeof(buf), serial_fd);   
+   serial_send(strlen(cmd), cmd);
+   len=serial_readline(buf, sizeof(buf));
    
    //printf("\n---\ncopy ram to flash ret: \n");
    //print_hex_ascii_line((unsigned char *)buf, len, 0);
@@ -427,8 +427,8 @@ int serial_cmd_go(int serial_fd, unsigned int addr)
 
    snprintf(cmd, sizeof(cmd), "G %u T\r\n", addr);
    
-   serial_send(serial_fd, strlen(cmd), cmd);
-   len=serial_readline(buf, sizeof(buf), serial_fd);
+   serial_send(strlen(cmd), cmd);
+   len=serial_readline(buf, sizeof(buf));
    
    ret = serial_retcode(buf, len);
    
@@ -471,7 +471,7 @@ int serial_retcode(char *buf, int buflen)
 }
 
 
-int serial_cmd_prepare_sector(int serial_fd, unsigned int from_sector, unsigned int to_sector)
+int serial_cmd_prepare_sector(unsigned int from_sector, unsigned int to_sector)
 {
    char buf[128];
    int len=0;
@@ -485,9 +485,8 @@ int serial_cmd_prepare_sector(int serial_fd, unsigned int from_sector, unsigned 
    memset(&buf,0,sizeof(buf));
    len=0;
 
-   serial_send(serial_fd, strlen(cmd), cmd);
-
-   len=serial_readline(buf, sizeof(buf), serial_fd);
+   serial_send(strlen(cmd), cmd);
+   len=serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
 
    if(ret != CMD_SUCCESS)
@@ -497,7 +496,7 @@ int serial_cmd_prepare_sector(int serial_fd, unsigned int from_sector, unsigned 
 }
 
 
-int serial_cmd_erase_sector(int serial_fd, unsigned int from_sector, unsigned int to_sector)
+int serial_cmd_erase_sector(unsigned int from_sector, unsigned int to_sector)
 {
    char buf[128];
    int len=0;
@@ -509,9 +508,9 @@ int serial_cmd_erase_sector(int serial_fd, unsigned int from_sector, unsigned in
    memset(&buf,0,sizeof(buf));
    len=0;
    
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
 
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
    
    if(ret != CMD_SUCCESS)
@@ -521,7 +520,7 @@ int serial_cmd_erase_sector(int serial_fd, unsigned int from_sector, unsigned in
 }
 
 
-int serial_cmd_unlock(int serial_fd)
+int serial_cmd_unlock(void)
 {
    char buf[128];
    int len=0;
@@ -531,9 +530,9 @@ int serial_cmd_unlock(int serial_fd)
    memset(&buf,0,sizeof(buf));
    len=0;
    
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
 
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
 
    if(ret != CMD_SUCCESS)
@@ -544,7 +543,7 @@ int serial_cmd_unlock(int serial_fd)
 }
 
 
-int serial_cmd_read_device_serialno(int serial_fd, unsigned int *ser)
+int serial_cmd_read_device_serialno(unsigned int *ser)
 {
    char buf[128];
    int len = 0;
@@ -555,11 +554,11 @@ int serial_cmd_read_device_serialno(int serial_fd, unsigned int *ser)
    memset(&buf,0,sizeof(buf));
    len = 0;
 
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
    
    while(ret != CMD_SUCCESS) {
       
-      len = serial_readline(buf, sizeof(buf), serial_fd);
+      len = serial_readline(buf, sizeof(buf));
       
       ret = serial_retcode(buf, len);
       memset(&buf,0,sizeof(buf));
@@ -567,7 +566,7 @@ int serial_cmd_read_device_serialno(int serial_fd, unsigned int *ser)
    }
    
    for(i=0;i<4;i++) {
-      len = serial_readline(buf, sizeof(buf), serial_fd);
+      len = serial_readline(buf, sizeof(buf));
       ser[i]=(unsigned int)atoi(buf);      
    }
 
@@ -578,7 +577,7 @@ int serial_cmd_read_device_serialno(int serial_fd, unsigned int *ser)
 }
 
 
-int serial_cmd_read_bootcode_version(int serial_fd, unsigned int *ver)
+int serial_cmd_read_bootcode_version(unsigned int *ver)
 {
    char buf[128];
    int len=0;
@@ -589,17 +588,17 @@ int serial_cmd_read_bootcode_version(int serial_fd, unsigned int *ver)
    memset(&buf,0,sizeof(buf));
    len=0;
 
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
    
    while(ret != CMD_SUCCESS) {
-      len = serial_readline(buf, sizeof(buf), serial_fd);
+      len = serial_readline(buf, sizeof(buf));
       ret = serial_retcode(buf, len);
       memset(&buf,0,sizeof(buf));
       len = 0;
    }
    
    // read response 0 - partid
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
 
    result = (unsigned int)atoi(buf);
    
@@ -612,7 +611,7 @@ int serial_cmd_read_bootcode_version(int serial_fd, unsigned int *ver)
 }
 
 
-int serial_cmd_read_partid(int serial_fd, unsigned int *id)
+int serial_cmd_read_partid(unsigned int *id)
 {
    char buf[128];
    int len=0;
@@ -623,17 +622,17 @@ int serial_cmd_read_partid(int serial_fd, unsigned int *id)
    memset(&buf,0,sizeof(buf));
    len=0;
    
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
    
    while(ret != CMD_SUCCESS) {
-      len = serial_readline(buf, sizeof(buf), serial_fd);
+      len = serial_readline(buf, sizeof(buf));
       ret = serial_retcode(buf, len);
       memset(&buf,0,sizeof(buf));
       len = 0;
    }
    
    // read response 0 - partid
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
 
    result = (unsigned int)atoi(buf);
    
@@ -716,9 +715,9 @@ int serial_cmd_set_baudrate(int serial_fd, unsigned long baudrate, unsigned int 
    memset(&buf,0,sizeof(buf));
    len = 0;
 
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
 
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
     
    if(ret != CMD_SUCCESS)
@@ -743,9 +742,9 @@ int serial_cmd_echo(int serial_fd, unsigned int echo)
    memset(&buf,0,sizeof(buf));
    len = 0;
 
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
 
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
 
    if(ret != CMD_SUCCESS)
@@ -773,9 +772,9 @@ int serial_cmd_blankcheck_sector(int serial_fd, unsigned int start_sector, unsig
    memset(&buf,0,sizeof(buf));
    len = 0;
 
-   serial_send(serial_fd, strlen(cmd), cmd);
+   serial_send(strlen(cmd), cmd);
 
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
    ret = serial_retcode(buf, len);
     
    if(ret != CMD_SUCCESS)
@@ -791,18 +790,18 @@ int serial_check_ok(char *buf, int buflen)
    return memcmp(&buf[buflen-4], "OK\r\n", 4) == 0;
 }
 
-int serial_synchronize(int serial_fd, unsigned int freq) 
+int serial_synchronize(unsigned int freq) 
 {
    char buf[128];
    int len = 0;
 
    memset(&buf,0,sizeof(buf));
-   serial_send(serial_fd, 1, "?");
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   serial_send(1, "?");
+   len = serial_readline(buf, sizeof(buf));
 
-   serial_send(serial_fd, len, buf);
+   serial_send(len, buf);
    memset(&buf,0,sizeof(buf));
-   len = serial_readline(buf, sizeof(buf), serial_fd);
+   len = serial_readline(buf, sizeof(buf));
 
    if(!serial_check_ok(buf, len))
       return -1;
@@ -811,12 +810,12 @@ int serial_synchronize(int serial_fd, unsigned int freq)
    len = 0;
 
    snprintf(buf, sizeof(buf), "%d\r\n", freq);
-   serial_send(serial_fd, (int)strlen(buf), buf);
+   serial_send((int)strlen(buf), buf);
 
    memset(&buf,0,sizeof(buf));
    len = 0;
 
-   len=serial_readline(buf, sizeof(buf), serial_fd);
+   len=serial_readline(buf, sizeof(buf));
 
    if(!serial_check_ok(buf, len))
       return -1;

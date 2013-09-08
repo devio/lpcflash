@@ -33,17 +33,20 @@
 
 CMDS=lpcflash
 OBJS=lpcflash.o serial.o base64.o serial_cmd.o msg.o const.o chksum.o
-LIBS=
-INCS=
-CC=gcc
+# LIBS=
+# INCS=
+CC=cc
 CFLAGS=-Wall
 # -ansi -pedantic
 
 CFLAGS+=-g
-CFLAGS+=${INCS} ${LIBS}
+CFLAGS+=${INCS}
 #CFLAGS+=-DWITH_MAGIC_SLEEP
 
 all: lpcflash
+
+libftdi: CFLAGS += -DLIBFTDI
+libftdi: all
 
 lpcflash: ${OBJS}
 	${CC} ${CFLAGS} -o $@ ${OBJS} ${LIBS}
