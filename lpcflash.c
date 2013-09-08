@@ -53,8 +53,10 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <getopt.h>
-
 #include <err.h>
+#ifdef LIBFTDI
+#include <ftdi.h>
+#endif
 
 #include "serial.h"
 #include "serial_cmd.h"
@@ -67,6 +69,14 @@
 #define DEFAULT_BAUDRATE         115200UL
 #define DEFAULT_DEVICE_CCLK      100000UL
 #define DEFAULT_RAMBUFFER_ADDR   0x10000400UL
+
+
+/* Device descriptors */
+int serial_fd = 0;
+#ifdef LIBFTDI
+struct ftdi_context *ftdi;
+int libftdi = 0;
+#endif
 
 extern char **lpcisp_status_msg;
 
@@ -82,11 +92,26 @@ typedef enum _lpcflash_cmds {
 static unsigned int lpcflash_get_lastsector(unsigned int);
 static void lpcflash_dumpinfo(mem_info_t *);
 static void lpcflash_help(void);
-static void lpcflash_erase(int, mem_info_t *);
+static void lpcflash_erase(mem_info_t *);
 static int lpcflash_image_dump(int, mem_info_t *, char *);
 static int lpcflash_image_write(int, mem_info_t *, char *);
 
 extern const unsigned long sector_address[][2];
+
+int lpcflash_cleanup(void)
+{
+#ifdef LIBFTDI
+   if(!libftdi) {
+      close(serial_fd);
+   } else {
+      ftdi_close();
+   }
+#else
+	 close(serial_fd);
+#endif
+   return(0);
+
+}
 
 int main(int argc, char **argv)
 {
@@ -96,9 +121,8 @@ int main(int argc, char **argv)
    
    char c = 0;
 
-   int serial_fd  = 0;
    int   verbose  = 0;
-   
+
    mem_info_t  mem;
 
    unsigned int opt_flash_sector_all       = 0;
@@ -110,6 +134,12 @@ int main(int argc, char **argv)
 
    unsigned long baudrate           = DEFAULT_BAUDRATE;
    unsigned int  opt_lpcflash_cmd   = LPC_NONE;
+
+   /* libftdi options */
+#ifdef LIBFTDI
+   int vid = 0x403;
+   int pid = 0x6015;
+#endif
 
    memset(&mem, 0, sizeof(mem));
    
@@ -193,24 +223,32 @@ int main(int argc, char **argv)
       }
    }
 
-   if ( !(
-         (device) &&
-         (binfile || outfile || opt_lpcflash_cmd)
-         ) ) {
+   if ( !(binfile || outfile || opt_lpcflash_cmd) ) {
       lpcflash_help();
       exit(1);
    }
       
    /* open serial port */
-   serial_fd = serial_open(device, baudrate);
-   
-   if(serial_fd<0) 
-      return(1);
+   if(device) {
+      serial_fd = serial_open(device, baudrate);
+      if(serial_fd<0) 
+         return(1);
+   } else {
+#ifdef LIBFTDI
+      libftdi = 1;
 
-   serial_synchronize(serial_fd, mem.cclk);
-   serial_cmd_read_partid(serial_fd, &mem.cpu.id);
-   serial_cmd_read_bootcode_version(serial_fd, &mem.cpu.bootcode);
-   serial_cmd_read_device_serialno(serial_fd, mem.cpu.serial);
+      if(ftdi_open(baudrate, vid, pid))
+         return(1);
+#else
+			lpcflash_help();
+			exit(1);
+#endif
+   }
+
+   serial_synchronize(mem.cclk);
+   serial_cmd_read_partid(&mem.cpu.id);
+   serial_cmd_read_bootcode_version(&mem.cpu.bootcode);
+   serial_cmd_read_device_serialno(mem.cpu.serial);
 
    if(opt_flash_sector_from < mem.rom_sector_base)
       opt_flash_sector_from = mem.rom_sector_base;
@@ -227,7 +265,7 @@ int main(int argc, char **argv)
    mem.rom_address_base = mem.rom_sector_base * 0x1000;
 
    
-   serial_cmd_unlock(serial_fd);
+   serial_cmd_unlock();
 
    if(opt_flash_sector_all != 0) {
       mem.img_sector_last = mem.rom_sector_last;
@@ -239,19 +277,17 @@ int main(int argc, char **argv)
    if (opt_lpcflash_cmd == LPC_ERASE) {
       
       // erase only
-      lpcflash_erase(serial_fd, &mem);
-      close(serial_fd);
-      return 0;
+      lpcflash_erase(&mem);
+      return(lpcflash_cleanup());
       
    } else if(opt_lpcflash_cmd == LPC_INFO) {
       
       // dump info only
-      close(serial_fd);
-      return 0;
+      return(lpcflash_cleanup());
         
    } else if(opt_lpcflash_cmd == LPC_WRITEFLASH) {
       
-      lpcflash_erase(serial_fd, &mem);
+      lpcflash_erase(&mem);
       lpcflash_image_write(serial_fd, &mem, binfile);
 
    } else if (opt_lpcflash_cmd == LPC_DUMPFLASH) {
@@ -265,18 +301,17 @@ int main(int argc, char **argv)
       serial_cmd_read_memory(serial_fd, outfile, read_addr, read_size);
    }
    
-   close(serial_fd);
-   return(0);
+   return(lpcflash_cleanup());
 }
 
 
 
-static void lpcflash_erase(int serial_fd, mem_info_t *mem)
+static void lpcflash_erase(mem_info_t *mem)
 {
    /* erase [entire] (user) flash rom */
    printf("[+] erasing sectors %ld - %d",  mem->rom_address_base, mem->rom_sector_last);
-   serial_cmd_prepare_sector(serial_fd,   mem->rom_address_base, mem->rom_sector_last);
-   serial_cmd_erase_sector(serial_fd,     mem->rom_address_base, mem->rom_sector_last);
+   serial_cmd_prepare_sector(mem->rom_address_base, mem->rom_sector_last);
+   serial_cmd_erase_sector(mem->rom_address_base, mem->rom_sector_last);
    printf(" - done.\n");   
    
    return;
@@ -415,8 +450,8 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
       unsigned int j=0;
       		
 		
-      serial_cmd_prepare_sector(serial_fd, i, i);
-      serial_cmd_erase_sector(serial_fd, i, i);
+      serial_cmd_prepare_sector(i, i);
+      serial_cmd_erase_sector(i, i);
       
       for(j=0; j < (0x1000/0x200); j++) { // write in blocksizes of 512 byte
          
@@ -427,7 +462,7 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
          
 		 
          serial_cmd_write_to_ram(serial_fd, mem->ram_buffer_address, nr, outbuf);
-         serial_cmd_prepare_sector(serial_fd, i, i);
+         serial_cmd_prepare_sector(i, i);
          serial_cmd_copy_ram_to_flash(serial_fd, mem->rom_address_base + nwritten, mem->ram_buffer_address, 512);
 
          nwritten += nr;
@@ -451,7 +486,7 @@ static int lpcflash_image_write(int serial_fd, mem_info_t *mem, char *imgpath)
          }
 		 
          serial_cmd_write_to_ram(serial_fd, mem->ram_buffer_address, nr, outbuf);
-         serial_cmd_prepare_sector(serial_fd, i, i);
+         serial_cmd_prepare_sector(i, i);
          serial_cmd_copy_ram_to_flash(serial_fd, mem->rom_address_base + nwritten, mem->ram_buffer_address, 512);
 
          nwritten += nr;
@@ -595,7 +630,9 @@ static void lpcflash_help(void)
 {
    // l:b:f:c:o:hviAR:F:T:B:a:s:
    puts("usage: lpcflash");
+#ifndef LIBFTDI
    puts("\t -l  <serial line>   (8N1 cu device)");
+#endif
    puts("\t -b  <baudrate>      (default 115200UL)");
    puts("\t -f  <infile>        (.bin file)");
    puts("\t -o  <outfile>");
@@ -607,6 +644,11 @@ static void lpcflash_help(void)
    puts("\t -B  <FLASH base sector>");
    puts("\t -a                  (ram/rom memory address in hex)");
    puts("\t -s                  (only for -a: size in hex - word aligned)");
+   puts("");
+   puts("optional flags:");
+#ifdef LIBFTDI
+   puts("\t[-l]  <serial line>  (8N1 cu device, libftdi if omitted)");
+#endif
    puts("\t[-v]                 (be verbose)");
    puts("\t[-h]                 ( _o/ )");
    puts("\t[-i]                 (dump cpu infos)");

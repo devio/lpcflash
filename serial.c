@@ -54,6 +54,9 @@
 #include <sys/time.h>
 #include <time.h>
 #include <ctype.h>
+#ifdef LIBFTDI
+#include <ftdi.h>
+#endif
 
 #include "msg.h"
 #include "serial.h"
@@ -75,7 +78,7 @@ static void magic(void)
 }
 #endif
 
-int serial_readline(char *buf, int len, int serial_fd)
+int serial_readline(char *buf, int len)
 {
    char *p = buf;
    size_t remaining = len;
@@ -84,22 +87,41 @@ int serial_readline(char *buf, int len, int serial_fd)
    memset(buf, 0, remaining);
 
    while(remaining>0) {
-      
+
       // need to read one character at a time to detect '\n'
+
+#ifdef LIBFTDI
+      if(!libftdi)
+      {
+         nread = read(serial_fd, p, 1);
+      } else {
+         nread = ftdi_read_data(ftdi, p, 1);
+      }
+#else
       nread = read(serial_fd, p, 1);
-      
+#endif
+
       switch (nread) {
-         
+
          case -1:
             if (errno == EAGAIN || errno == EINTR) {
-	            WARN("read interrupted");
-	            continue;
-	         }
-	         err(1, "read(): ");
+               WARN("read interrupted");
+               continue;
+            }
+            err(1, "read(): ");
             break;
-	      
-	      case 0:
-	         errx(1, "unexpected EOF read");
+
+#ifdef LIBFTDI
+         case -666:
+            errx(1, "USB Unavailable");
+            break;
+
+         case 0:
+            if(!libftdi) errx(1, "unexpected EOF read");
+#else
+         case 0:
+            errx(1, "unexpected EOF read");
+#endif
             break;
       }
 
@@ -117,7 +139,7 @@ int serial_readline(char *buf, int len, int serial_fd)
    return p - buf;
 }
 
-int serial_send(int serial_fd, int len, char *data)
+int serial_send(int len, char *data)
 {
    ssize_t nwritten;
    char *p = data;
@@ -130,8 +152,17 @@ int serial_send(int serial_fd, int len, char *data)
 
    while (remaining > 0) {
       errno = 0;
-      
+
+#ifdef LIBFTDI
+      if(!libftdi) {
+         nwritten = write(serial_fd, (unsigned char *)p, remaining);
+      } else {
+         nwritten = ftdi_write_data(ftdi, (unsigned char *)p, remaining);
+      }
+#else
       nwritten = write(serial_fd, (unsigned char *)p, remaining);
+#endif
+
       
       switch (nwritten) {
 	      case -1:
@@ -141,7 +172,14 @@ int serial_send(int serial_fd, int len, char *data)
 	         }
 	         err(1,"write(): ");
             break;
-            
+
+#ifdef LIBFTDI
+         case -666: /* FTDI USB unavailable */
+            nwritten = 0;
+            warn("write(): ");
+            break;
+#endif
+
 	      case 0:
 	         warn("write(): ");
             break;
@@ -348,6 +386,118 @@ int serial_open(char *device, int baudrate)
    return(fd);
 }
 
+#ifdef LIBFTDI
+void ftdi_close(void)
+{
+   int f;
+
+   // Looks like the reset doesn't help
+   /* 
+   f = ftdi_usb_reset(ftdi);
+   if (f<0)
+   {
+      fprintf(stderr, "Unable to reset device: (%s)",
+         ftdi_get_error_string(ftdi));
+   } */
+
+   f = ftdi_usb_close(ftdi);
+   if (f<0)
+   {
+      fprintf(stderr, "Unable to close device: (%s)",
+         ftdi_get_error_string(ftdi));
+   }
+
+   free(ftdi);
+}
 
 
+int ftdi_open(int baudrate, int vid, int pid)
+{
+   int interface = INTERFACE_ANY;
+   int f; /* return value */
 
+   if ((ftdi = ftdi_new()) == 0)
+   {
+       fprintf(stderr, "ftdi_new failed\n");
+       return EXIT_FAILURE;
+   }
+
+   if (!vid && !pid && (interface == INTERFACE_ANY))
+   {
+      ftdi_set_interface(ftdi, INTERFACE_ANY);
+      struct ftdi_device_list *devlist;
+      int res;
+      if ((res = ftdi_usb_find_all(ftdi, &devlist, 0, 0)) < 0)
+      {
+          fprintf(stderr, "No FTDI with default VID/PID found\n");
+          ftdi_close();
+      }
+      if (res == 1)
+      {
+          f = ftdi_usb_open_dev(ftdi, devlist[0].dev);
+          if (f<0)
+          {
+              fprintf(stderr, "Unable to open deviced: (%s)",
+                      ftdi_get_error_string(ftdi));
+          }
+      }
+      ftdi_list_free(&devlist);
+      if (res > 1)
+      {
+          fprintf(stderr, "%d Devices found, please select Device with VID/PID\n", res);
+          /* TODO: List Devices*/
+          ftdi_close();
+      }
+      if (res == 0)
+      {
+          fprintf(stderr, "No Devices found with default VID/PID\n");
+          ftdi_close();
+      }
+   }
+   else
+   {
+       // Select interface
+       ftdi_set_interface(ftdi, interface);
+       
+       // Open device
+       f = ftdi_usb_open(ftdi, vid, pid);
+   }
+
+   if (f < 0)
+   {
+       fprintf(stderr, "unable to open ftdi device: %d (%s)\n", f, ftdi_get_error_string(ftdi));
+       exit(-1);
+   }
+
+   // Set baudrate
+   f = ftdi_set_baudrate(ftdi, baudrate);
+   if (f < 0)
+   {
+       fprintf(stderr, "unable to set baudrate: %d (%s)\n", f, ftdi_get_error_string(ftdi));
+       exit(-1);
+   }
+
+   /* Set line parameters
+    *
+    * TODO: Make these parameters settable from the command line
+    *
+    * Parameters are choosen that sending a continous stream of 0x55 
+    * should give a square wave
+    *
+    */
+
+   f = ftdi_set_line_property(ftdi, 8, STOP_BIT_1, NONE);
+   if (f < 0)
+   {
+       fprintf(stderr, "unable to set line parameters: %d (%s)\n", f, ftdi_get_error_string(ftdi));
+       exit(-1);
+   }
+
+   return(0);
+}
+
+int ftdi_purge(void)
+{
+    return ftdi_usb_purge_buffers(ftdi);
+}
+#endif
