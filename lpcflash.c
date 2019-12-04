@@ -94,7 +94,7 @@ int main(int argc, char **argv)
    char *binfile     = NULL;
    char *outfile     = NULL;
    
-   char c = 0;
+   int c = 0;
 
    int serial_fd  = 0;
    int   verbose  = 0;
